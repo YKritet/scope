@@ -56,7 +56,7 @@ function printTable(services) {
     head: [
       chalk.cyan.bold("PORT"), chalk.cyan.bold("PROCESS"), chalk.cyan.bold("USER"),
       chalk.cyan.bold("DIR"), chalk.cyan.bold("BRANCH"), chalk.cyan.bold("FRAMEWORK"),
-      chalk.cyan.bold("UPTIME"), chalk.cyan.bold("STATUS"),
+      chalk.cyan.bold("CPU"), chalk.cyan.bold("MEM"), chalk.cyan.bold("UPTIME"), chalk.cyan.bold("STATUS"),
     ],
   });
 
@@ -78,6 +78,8 @@ function printTable(services) {
       dirShort ? chalk.dim(dirShort) : chalk.gray("—"),
       branch,
       s.framework ? chalk.cyan(trunc(s.framework, 10)) : chalk.gray("—"),
+      s.cpu != null ? (s.cpu > 25 ? chalk.red(s.cpu.toFixed(1) + "%") : s.cpu > 5 ? chalk.yellow(s.cpu.toFixed(1) + "%") : chalk.green(s.cpu.toFixed(1) + "%")) : chalk.gray("—"),
+      s.memory ? chalk.green(s.memory) : chalk.gray("—"),
       s.uptime ? chalk.yellow(s.uptime) : chalk.gray("—"),
       statusStr(s.status),
     ]);

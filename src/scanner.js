@@ -123,22 +123,23 @@ function batchPs(pids) {
   if (!pids.length) return map;
   try {
     const raw = execSync(
-      `ps -p ${pids.join(",")} -o pid=,ppid=,stat=,rss=,user=,lstart=,command= 2>/dev/null`,
+      `ps -p ${pids.join(",")} -o pid=,ppid=,stat=,rss=,pcpu=,user=,lstart=,command= 2>/dev/null`,
       { encoding: "utf8", timeout: 5000 },
     ).trim();
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       const m = line.trim().match(
-        /^(\d+)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\S+)\s+\w+\s+(\w+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/,
+        /^(\d+)\s+(\d+)\s+(\S+)\s+(\d+)\s+([\d.]+)\s+(\S+)\s+\w+\s+(\w+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/,
       );
       if (!m) continue;
       map.set(parseInt(m[1], 10), {
         ppid: parseInt(m[2], 10),
         stat: m[3],
         rss: parseInt(m[4], 10),
-        user: m[5],
-        lstart: m[6],
-        command: m[7],
+        cpu: parseFloat(m[5]),
+        user: m[6],
+        lstart: m[7],
+        command: m[8],
       });
     }
   } catch {}
@@ -339,6 +340,7 @@ export async function scan() {
       name: ps ? basename(ps.command.split(" ")[0]) : "unknown",
       processName: ps ? basename(ps.command.split(" ")[0]) : "unknown",
       user: ps?.user ?? null,
+      cpu: ps?.cpu ?? null,
       status: "listening",
       uptime: null,
       memory: null,
