@@ -1,5 +1,5 @@
 {
-  "name": "scope",
+  "name": "@ykritet/scope",
   "version": "0.1.0",
   "description": "See every server running on your machine — port, process, folder, branch, user, logs",
   "type": "module",

@@ -8,6 +8,14 @@ import Table from "cli-table3";
 const args = process.argv.slice(2);
 const command = args[0];
 
+if (command === "--version" || command === "-v") {
+  const { createRequire } = await import("module");
+  const req = createRequire(import.meta.url);
+  const { version } = req("../package.json");
+  console.log(version);
+  process.exit(0);
+}
+
 async function main() {
   // Default: static table
   if (!command || command === "ls") {

@@ -74,7 +74,7 @@ function buildRow(s, selected) {
     `{bold}:${trunc(String(s.port), 5)}{/}`,
     trunc(s.processName ?? "—", 12),
     s.user ? trunc(s.user, 13) : "{gray-fg}—{/}",
-    dir   ? `{dim}${pad(dir, 35)}{/}` : "{gray-fg}—{/}",
+    dir   ? `{gray-fg}${pad(dir, 35)}{/}` : "{gray-fg}—{/}",
     branch,
     s.framework ? `{cyan-fg}${trunc(s.framework, 10)}{/}` : "{gray-fg}—{/}",
     cpuColor(s.cpu),
@@ -244,20 +244,23 @@ export async function runTui() {
   // ── Layout helpers ───────────────────────────────────────────────
 
   function reflow() {
-    const rows = screen.rows;
-    const detailH = 9;
-    const logH    = logsVisible ? Math.floor(rows * 0.25) : 0;
-    const listH   = rows - 2 - detailH - logH - 1; // header(1) + cols(1) + statusbar(1)
+    const rows     = screen.rows;
+    const detailH  = 9;
+    const statusH  = 1;
+    const headerH  = 2; // top bar + col headers
+    const logH     = logsVisible ? Math.max(8, Math.floor(rows * 0.25)) : 0;
+    const listH    = Math.max(4, rows - headerH - detailH - logH - statusH);
 
-    list.height      = Math.max(4, listH);
-    detailBox.top    = 2 + list.height;
+    list.top     = headerH;
+    list.height  = listH;
+
+    detailBox.top    = headerH + listH;
     detailBox.height = detailH;
 
     if (logsVisible) {
-      logPanel.top    = detailBox.top + detailH;
+      logPanel.top    = headerH + listH + detailH;
       logPanel.height = logH;
       logPanel.show();
-      statusBar.bottom = 0;
     } else {
       logPanel.hide();
     }
