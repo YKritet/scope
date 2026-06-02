@@ -1,0 +1,23 @@
+{
+  "name": "scope",
+  "version": "0.1.0",
+  "description": "See every server running on your machine — port, process, folder, branch, user, logs",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "bin": { "scope": "./src/index.js" },
+  "keywords": ["cli", "ports", "dev-server", "docker", "tui", "developer-tools"],
+  "author": "Kritet Youssef",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YKritet/scope.git"
+  },
+  "files": ["src/"],
+  "scripts": { "start": "node src/index.js" },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "string-width": "^7.2.0"
+  }
+}
