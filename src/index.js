@@ -16,10 +16,13 @@ if (command === "--version" || command === "-v") {
   process.exit(0);
 }
 
+const jsonFlag = args.includes("--json") || args.includes("-j");
+
 async function main() {
-  // Default: static table
-  if (!command || command === "ls") {
+  // Default: static table or JSON
+  if (!command || command === "ls" || command === "--json" || command === "-j") {
     const services = await scan();
+    if (jsonFlag) { console.log(JSON.stringify(services, null, 2)); return; }
     printTable(services);
     return;
   }
@@ -30,15 +33,27 @@ async function main() {
     return;
   }
 
+  // Kill a port
+  if (command === "kill") {
+    const target = parseInt(args[1], 10);
+    const force  = args.includes("-f") || args.includes("--force");
+    if (isNaN(target)) { console.log(chalk.red("\n  Usage: scope kill <port> [-f]\n")); return; }
+    const services = await scan();
+    const s = services.find((x) => x.port === target);
+    if (!s?.pid) { console.log(chalk.red(`\n  No process found on :${target}\n`)); return; }
+    const ok = killPid(s.pid, force);
+    if (ok) console.log(chalk.green(`\n  Killed :${target} — ${s.processName} (PID ${s.pid})\n`));
+    else    console.log(chalk.red(`\n  Failed. Try: scope kill ${target} -f\n`));
+    return;
+  }
+
   // Inspect a single port
   const port = parseInt(command, 10);
   if (!isNaN(port)) {
     const services = await scan();
     const s = services.find((x) => x.port === port);
-    if (!s) {
-      console.log(chalk.red(`\n  No service found on :${port}\n`));
-      return;
-    }
+    if (!s) { console.log(chalk.red(`\n  No service found on :${port}\n`)); return; }
+    if (jsonFlag) { console.log(JSON.stringify(s, null, 2)); return; }
     printDetail(s);
     return;
   }
@@ -64,7 +79,7 @@ function printTable(services) {
     head: [
       chalk.cyan.bold("PORT"), chalk.cyan.bold("PROCESS"), chalk.cyan.bold("USER"),
       chalk.cyan.bold("DIR"), chalk.cyan.bold("BRANCH"), chalk.cyan.bold("FRAMEWORK"),
-      chalk.cyan.bold("CPU"), chalk.cyan.bold("MEM"), chalk.cyan.bold("UPTIME"), chalk.cyan.bold("STATUS"),
+      chalk.cyan.bold("CPU"), chalk.cyan.bold("MEM"), chalk.cyan.bold("UPTIME"), chalk.cyan.bold("STATUS"), chalk.cyan.bold("SEC"),
     ],
   });
 
@@ -90,6 +105,7 @@ function printTable(services) {
       s.memory ? chalk.green(s.memory) : chalk.gray("—"),
       s.uptime ? chalk.yellow(s.uptime) : chalk.gray("—"),
       statusStr(s.status),
+      secStr(s),
     ]);
   }
 
@@ -130,7 +146,10 @@ function printDetail(s) {
     }
     row("FRAMEWORK", s.framework ? chalk.cyan(s.framework) : chalk.gray("—"));
     console.log();
-    row("CMD", s.command ? chalk.gray(s.command) : chalk.gray("—"));
+    row("CMD",  s.command ? chalk.gray(s.command) : chalk.gray("—"));
+    row("BIND", s.bindScope === "public" ? chalk.red("0.0.0.0  public — reachable on network") : chalk.green("127.0.0.1  local only"));
+    row("ROOT", s.rootProcess ? chalk.red("yes") : chalk.green("no"));
+    if (s.bindScope === "public") console.log(chalk.yellow("\n  ! Service is exposed on all interfaces."));
   } else {
     row("IMAGE", chalk.gray(s.image ?? "—"));
     row("CONTAINER", chalk.gray(s.containerId ?? "—"));
@@ -148,17 +167,29 @@ function printDetail(s) {
 
 function printHelp() {
   console.log(chalk.cyan.bold("\n  scope\n"));
-  console.log(chalk.gray("  scope         ") + "list all services (static table)");
-  console.log(chalk.gray("  scope tui     ") + "interactive TUI (navigate, logs, kill)");
-  console.log(chalk.gray("  scope <port>  ") + "inspect a specific port");
+  console.log(chalk.gray("  scope               ") + "list all services (static table)");
+  console.log(chalk.gray("  scope tui           ") + "interactive TUI — navigate, logs, kill, search");
+  console.log(chalk.gray("  scope <port>        ") + "inspect a specific port in detail");
+  console.log(chalk.gray("  scope kill <port>   ") + "kill whatever is on that port");
+  console.log(chalk.gray("  scope kill <port> -f") + "force kill (SIGKILL)");
+  console.log(chalk.gray("  scope --json        ") + "machine-readable JSON output");
+  console.log(chalk.gray("  scope --version     ") + "show version");
   console.log();
 }
 
+function secStr(s) {
+  const flags = [];
+  if (s.bindScope === "public") flags.push(chalk.red("pub"));
+  if (s.rootProcess)            flags.push(chalk.red("root"));
+  if (s.status === "zombie")    flags.push(chalk.red("zombie"));
+  if (s.status === "orphaned")  flags.push(chalk.yellow("orphan"));
+  return flags.length ? flags.join(" ") : chalk.gray("ok");
+}
+
 function statusStr(s) {
-  const icons = { running: chalk.green("●"), listening: chalk.green("●"), zombie: chalk.red("●"), orphaned: chalk.yellow("●") };
-  const icon = icons[s] ?? chalk.gray("●");
+  const icons  = { running: chalk.green("●"), listening: chalk.green("●"), zombie: chalk.red("●"), orphaned: chalk.yellow("●") };
   const labels = { running: chalk.green("running"), listening: chalk.green("listening"), zombie: chalk.red("zombie"), orphaned: chalk.yellow("orphaned") };
-  return `${icon} ${labels[s] ?? chalk.gray(s)}`;
+  return `${icons[s] ?? chalk.gray("●")} ${labels[s] ?? chalk.gray(s)}`;
 }
 
 function trunc(s, n) {

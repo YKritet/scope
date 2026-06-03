@@ -396,6 +396,37 @@ export async function runTui() {
     setTimeout(() => refresh(), 600);
   });
 
+  screen.key(["t"], () => {
+    if (searchMode) return;
+    const s = filtered[selectedIdx];
+    if (!s) return;
+    const title = `${s.processName} on :${s.port}${s.branch ? ` (${s.branch})` : ""}`;
+    const body  = `Service: ${s.processName}\nPort: ${s.port}\nDir: ${s.cwd ?? s.composeWorkdir ?? "—"}\nBranch: ${s.branch ?? "—"}\nUser: ${s.user ?? "—"}\nStatus: ${s.status}`;
+    try {
+      const repo = execSync("git remote get-url origin 2>/dev/null", { encoding: "utf8" }).trim()
+        .replace(/.*github\.com[^/]*[:/]/, "").replace(/\.git$/, "");
+      if (repo.includes("/")) {
+        execSync(`gh issue create --repo "${repo}" --title "${title.replace(/"/g, "'")}" --body "${body.replace(/"/g, "'")}"`, { stdio: "ignore" });
+        logPanel.log(`[ticket] GitHub issue created: ${title}`);
+      } else { throw new Error("no github remote"); }
+    } catch {
+      const dir = s.cwd ?? process.cwd();
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+      const date = new Date().toISOString().slice(0, 10);
+      const fs = require("fs"); const path = require("path");
+      const ticketsDir = path.join(dir, ".claude", "tickets");
+      fs.mkdirSync(ticketsDir, { recursive: true });
+      const counterFile = path.join(ticketsDir, ".counter");
+      const n = (parseInt(fs.readFileSync(counterFile, "utf8").trim(), 10) || 0) + 1;
+      fs.writeFileSync(counterFile, String(n));
+      const id = String(n).padStart(4, "0");
+      fs.writeFileSync(path.join(ticketsDir, `${date}-${id}-${slug}.md`), `# TICKET: ${id}\nDate: ${date}\nStatus: open\n\n## Request\n${body}\n`);
+      logPanel.log(`[ticket] Local ticket created: ${date}-${id}-${slug}.md`);
+    }
+    if (!logsVisible) toggleLogs();
+    screen.render();
+  });
+
   screen.key(["o"], () => {
     if (searchMode) return;
     const s = filtered[selectedIdx];

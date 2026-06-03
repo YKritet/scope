@@ -281,7 +281,8 @@ export async function scan() {
     ).trim();
   } catch { return []; }
 
-  const portToPid = new Map();
+  const portToPid = new Map();        // port → pid
+  const portToBind = new Map();       // port → "public"|"local"
   for (const line of listeningRaw.split("\n").slice(1)) {
     const parts = line.split(/\s+/);
     if (parts.length < 9) continue;
@@ -289,7 +290,13 @@ export async function scan() {
     const addrField = parts[8];
     const colonIdx = addrField.lastIndexOf(":");
     const port = parseInt(addrField.slice(colonIdx + 1), 10);
-    if (port && pid && !portToPid.has(port)) portToPid.set(port, pid);
+    if (!port || !pid) continue;
+    const bindHost = addrField.slice(0, colonIdx);
+    const isPublic = bindHost === "*" || bindHost === "0.0.0.0" || bindHost === "::";
+    if (!portToPid.has(port)) {
+      portToPid.set(port, pid);
+      portToBind.set(port, isPublic ? "public" : "local");
+    }
   }
 
   const pids = [...new Set(portToPid.values())];
@@ -342,6 +349,8 @@ export async function scan() {
       user: ps?.user ?? null,
       cpu: ps?.cpu ?? null,
       status: "listening",
+      bindScope: portToBind.get(port) ?? "local",
+      rootProcess: ps?.user === "root",
       uptime: null,
       memory: null,
       command: ps?.command ?? null,

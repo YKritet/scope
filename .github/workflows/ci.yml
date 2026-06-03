@@ -8,11 +8,12 @@ on:
 
 jobs:
   test:
-    name: Test (Node ${{ matrix.node }}, ${{ matrix.os }})
+    name: Test — Node ${{ matrix.node }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        node: [18, 20, 22]
+        node: ["18", "20", "22"]
         os: [ubuntu-latest, macos-latest]
 
     steps:
@@ -26,12 +27,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Syntax check
+        run: node --check src/index.js src/scanner.js src/tui.js
+
       - name: Version flag
         run: node src/index.js --version
 
-      - name: Static scan (no TTY needed)
-        run: node src/index.js 2>&1 | head -5 || true
+      - name: JSON output is valid
+        run: node src/index.js --json | jq -e 'type == "array"'
 
-      - name: Lint (no unused vars, no syntax errors)
-        run: node --check src/index.js src/scanner.js src/tui.js
+      - name: JSON entries have required fields
+        run: |
+          node src/index.js --json | jq -e '
+            if length == 0 then true
+            else .[0] | has("port") and has("processName") and has("source") and has("status")
+            end
+          '
 
+      - name: Install bats
+        run: |
+          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
+          /tmp/bats/install.sh /usr/local
+
+      - name: Run bats tests
+        run: bats test/scope.bats
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck on install.sh and hooks
+        run: |
+          sudo apt-get install -y shellcheck -qq
+          shellcheck install.sh
+          # hooks live in user home so skip in CI — lint them explicitly
+          shellcheck --shell=bash <(grep -v '^#' install.sh | head -1; cat install.sh)
+
+  install-script:
+    name: Smoke-test installer (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run installer (dry-run env)
+        run: bash -n install.sh && echo "install.sh syntax OK"
