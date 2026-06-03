@@ -2,150 +2,177 @@
 # scope installer — https://github.com/YKritet/scope
 set -euo pipefail
 
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BOLD='\033[1m'
-DIM='\033[2m'
-RESET='\033[0m'
+# ── Colors ───────────────────────────────────────────────────────────────────
+CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+RED='\033[0;31m'; BOLD='\033[1m'; DIM='\033[2m'; RESET='\033[0m'
 
-step()  { printf "  ${CYAN}▸${RESET} %s" "$1"; }
-ok()    { printf "\r  ${GREEN}✓${RESET} %s\n" "$1"; }
-warn()  { printf "  ${YELLOW}!${RESET} %s\n" "$1"; }
-fail()  { printf "  ${RED}✗${RESET} %s\n" "$1"; exit 1; }
-info()  { printf "  ${DIM}%s${RESET}\n" "$1"; }
+# Disable colors when not in a terminal
+if [[ ! -t 1 ]]; then
+  CYAN=''; GREEN=''; YELLOW=''; RED=''; BOLD=''; DIM=''; RESET=''
+fi
 
-printf "\n"
-printf "  ${CYAN}${BOLD}┌───────────────────────────────────────┐${RESET}\n"
-printf "  ${CYAN}${BOLD}│${RESET}  ${BOLD}scope${RESET} — see every server on your machine  ${CYAN}${BOLD}│${RESET}\n"
-printf "  ${CYAN}${BOLD}└───────────────────────────────────────┘${RESET}\n\n"
+p()    { printf '%b\n' "$*"; }   # print with color escapes
+step() { printf '  %b▸%b  %s' "$CYAN" "$RESET" "$1"; }
+ok()   { printf '\r  %b✓%b  %s\n' "$GREEN" "$RESET" "$1"; }
+warn() { p "  ${YELLOW}!${RESET}  $1"; }
+fail() { p "  ${RED}✗${RESET}  $1"; exit 1; }
 
-# ── 1. Node.js ──────────────────────────────────────────────────────────────
+p ""
+p "  ${CYAN}${BOLD}┌────────────────────────────────────────┐${RESET}"
+p "  ${CYAN}${BOLD}│${RESET}  ${BOLD}scope${RESET} — see every server on your machine  ${CYAN}${BOLD}│${RESET}"
+p "  ${CYAN}${BOLD}└────────────────────────────────────────┘${RESET}"
+p ""
+p "  This will install ${BOLD}scope${RESET} and add shortcuts to your terminal."
+p "  Takes about 30 seconds. You can always uninstall with: ${CYAN}npm uninstall -g @ykritet/scope${RESET}"
+p ""
 
-step "Checking Node.js..."
+# ── 1. Find Node.js ──────────────────────────────────────────────────────────
+step "Looking for Node.js..."
 NODE_BIN=""
-for candidate in node ~/.nvm/versions/node/*/bin/node /opt/homebrew/bin/node /usr/local/bin/node; do
-  if command -v "$candidate" &>/dev/null 2>&1 || [[ -x "$candidate" ]]; then
-    NODE_BIN=$(command -v "$candidate" 2>/dev/null || echo "$candidate")
-    break
-  fi
+for candidate in \
+  "$(command -v node 2>/dev/null || true)" \
+  "$HOME/.nvm/versions/node/v22.0.0/bin/node" \
+  "$HOME/.nvm/versions/node/v20.0.0/bin/node" \
+  /opt/homebrew/bin/node \
+  /usr/local/bin/node \
+  /usr/bin/node; do
+  if [[ -x "$candidate" ]]; then NODE_BIN="$candidate"; break; fi
 done
 
+# Also try the latest nvm version
+if [[ -z "$NODE_BIN" && -d "$HOME/.nvm/versions/node" ]]; then
+  NODE_BIN=$(ls -t "$HOME/.nvm/versions/node"/*/bin/node 2>/dev/null | head -1 || true)
+fi
+
 if [[ -z "$NODE_BIN" ]]; then
-  warn "Node.js not found."
-  printf "\n  Install it first:\n"
-  printf "  ${CYAN}  brew install node${RESET}     (macOS)\n"
-  printf "  ${CYAN}  apt install nodejs${RESET}    (Debian/Ubuntu)\n"
-  printf "  ${CYAN}  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/HEAD/install.sh | bash${RESET}\n\n"
+  ok "Node.js not found"
+  p ""
+  p "  ${YELLOW}scope needs Node.js to run.${RESET} Install it first:"
+  p ""
+  p "  ${BOLD}macOS:${RESET}   ${CYAN}brew install node${RESET}"
+  p "  ${BOLD}Ubuntu:${RESET}  ${CYAN}apt install nodejs npm${RESET}"
+  p "  ${BOLD}Any:${RESET}     ${CYAN}https://nodejs.org${RESET}  (click the big green button)"
+  p ""
+  p "  Then re-run this installer."
   exit 1
 fi
 
 NODE_VER=$("$NODE_BIN" --version 2>/dev/null)
-ok "Node.js $NODE_VER"
+ok "Found Node.js $NODE_VER"
 
-# ── 2. Install ───────────────────────────────────────────────────────────────
+# ── 2. Find a package manager (npm / pnpm / bun) ─────────────────────────────
+step "Finding a package manager..."
+NODE_DIR=$(dirname "$NODE_BIN")
+PKG_BIN=""
+PKG_NAME=""
 
-NPM_BIN=$(dirname "$NODE_BIN")/npm
+for pm in "$NODE_DIR/pnpm" "$NODE_DIR/bun" "$NODE_DIR/npm" \
+          "$(command -v pnpm 2>/dev/null || true)" \
+          "$(command -v bun  2>/dev/null || true)" \
+          "$(command -v npm  2>/dev/null || true)"; do
+  if [[ -x "$pm" ]]; then
+    PKG_BIN="$pm"
+    PKG_NAME=$(basename "$pm")
+    break
+  fi
+done
 
-step "Installing @ykritet/scope..."
-if "$NPM_BIN" install -g @ykritet/scope --silent 2>/dev/null; then
-  ok "Installed via npm"
-else
-  warn "npm install failed — installing from GitHub..."
-  step "Cloning and linking..."
+[[ -z "$PKG_BIN" ]] && fail "No package manager found. Install npm, pnpm, or bun."
+ok "Using $PKG_NAME"
+
+# ── 3. Install scope ──────────────────────────────────────────────────────────
+step "Installing scope (this takes ~10 seconds)..."
+INSTALL_OK=false
+
+case "$PKG_NAME" in
+  pnpm) "$PKG_BIN" add -g @ykritet/scope --silent 2>/dev/null && INSTALL_OK=true ;;
+  bun)  "$PKG_BIN" add -g @ykritet/scope          2>/dev/null && INSTALL_OK=true ;;
+  npm)  "$PKG_BIN" install -g @ykritet/scope --silent 2>/dev/null && INSTALL_OK=true ;;
+esac
+
+if [[ "$INSTALL_OK" != "true" ]]; then
+  warn "Package registry install failed. Trying GitHub source..."
   TMPDIR=$(mktemp -d)
-  git clone --depth 1 https://github.com/YKritet/scope.git "$TMPDIR/scope" &>/dev/null
+  trap 'rm -rf "$TMPDIR"' EXIT
+  git clone --depth 1 https://github.com/YKritet/scope.git "$TMPDIR/scope" &>/dev/null \
+    || fail "Could not download scope. Check your internet connection and try again."
   cd "$TMPDIR/scope"
-  "$NPM_BIN" install --production --silent &>/dev/null
-  "$NPM_BIN" link --silent &>/dev/null
-  ok "Installed from source"
+  npm install --production --silent &>/dev/null
+  npm link --silent &>/dev/null
+  INSTALL_OK=true
 fi
 
-# ── 3. Shell detection ───────────────────────────────────────────────────────
+ok "scope installed"
 
-step "Detecting shell..."
+# ── 4. Detect shell and config file ───────────────────────────────────────────
+step "Detecting your shell..."
 SHELL_NAME=$(basename "${SHELL:-bash}")
 case "$SHELL_NAME" in
-  zsh)   RC="$HOME/.zshrc" ;;
-  bash)  RC="${BASH_ENV:-$HOME/.bashrc}" ;;
-  fish)  RC="$HOME/.config/fish/config.fish" ;;
-  *)     RC="$HOME/.profile" ;;
+  zsh)  RC="$HOME/.zshrc" ;;
+  bash) RC="${BASH_ENV:-$HOME/.bashrc}" ;;
+  fish) RC="$HOME/.config/fish/config.fish" ;;
+  *)    RC="$HOME/.profile" ;;
 esac
-ok "Shell: $SHELL_NAME ($RC)"
+ok "Shell: $SHELL_NAME"
 
-# ── 4. PATH + aliases ────────────────────────────────────────────────────────
+# ── 5. Add aliases ────────────────────────────────────────────────────────────
+step "Adding shortcuts to $RC..."
+MARK_START="# >>> scope >>>"
+MARK_END="# <<< scope <<<"
 
-SCOPE_BIN=$(command -v scope 2>/dev/null || "$NPM_BIN" bin -g 2>/dev/null)/scope
-BLOCK_START="# >>> scope >>>"
-BLOCK_END="# <<< scope <<<"
-
-add_block() {
-  local file="$1"
-  # Remove old block if present
-  if grep -q "$BLOCK_START" "$file" 2>/dev/null; then
-    sed -i.bak "/$BLOCK_START/,/$BLOCK_END/d" "$file" 2>/dev/null || true
-  fi
-
-  if [[ "$SHELL_NAME" == "fish" ]]; then
-    cat >> "$file" <<FISH
-
-$BLOCK_START
-alias st='scope tui'
-alias sk='scope kill'
-alias sp='scope'
-$BLOCK_END
-FISH
+# Remove old block first (idempotent installs)
+if grep -q "$MARK_START" "$RC" 2>/dev/null; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "/$MARK_START/,/$MARK_END/d" "$RC"
   else
-    cat >> "$file" <<SH
-
-$BLOCK_START
-alias st='scope tui'     # interactive TUI
-alias sk='scope kill'    # kill a port: sk 3000
-alias sp='scope'         # static table
-$BLOCK_END
-SH
+    sed -i "/$MARK_START/,/$MARK_END/d" "$RC"
   fi
-}
-
-step "Adding aliases to $RC..."
-add_block "$RC"
-ok "Aliases added  (st, sk, sp)"
-
-# ── 5. Shell completion (zsh only for now) ───────────────────────────────────
-
-if [[ "$SHELL_NAME" == "zsh" ]]; then
-  COMPLETION_DIR="${ZDOTDIR:-$HOME}/.zsh/completions"
-  mkdir -p "$COMPLETION_DIR"
-  cat > "$COMPLETION_DIR/_scope" <<'COMP'
-#compdef scope
-_scope() {
-  local -a cmds
-  cmds=('tui:interactive dashboard' 'kill:kill a port' 'ls:static table' '--json:JSON output' '--version:show version')
-  _describe 'scope commands' cmds
-}
-_scope
-COMP
-  # ensure completions dir is on fpath
-  if ! grep -q "$COMPLETION_DIR" "$RC" 2>/dev/null; then
-    echo "fpath=($COMPLETION_DIR \$fpath)" >> "$RC"
-  fi
-  ok "Zsh completion installed"
 fi
 
-# ── 6. Summary ───────────────────────────────────────────────────────────────
+if [[ "$SHELL_NAME" == "fish" ]]; then
+  printf '\n%s\nalias st="scope tui"\nalias sk="scope kill"\nalias sp="scope"\n%s\n' \
+    "$MARK_START" "$MARK_END" >> "$RC"
+else
+  printf '\n%s\nalias st="scope tui"   # open the interactive dashboard\nalias sk="scope kill"  # kill a port: sk 3000\nalias sp="scope"       # quick table view\n%s\n' \
+    "$MARK_START" "$MARK_END" >> "$RC"
+fi
+ok "Shortcuts added  (st, sk, sp)"
 
-printf "\n  ${GREEN}${BOLD}All done!${RESET}\n\n"
-printf "  Reload your shell:\n"
-printf "  ${CYAN}  source %s${RESET}\n\n" "$RC"
-printf "  Commands:\n"
-printf "  ${BOLD}  scope${RESET}         ${DIM}static table of all services${RESET}\n"
-printf "  ${BOLD}  scope tui${RESET}     ${DIM}interactive TUI (j/k navigate, l logs, / search)${RESET}\n"
-printf "  ${BOLD}  scope kill 3000${RESET}  ${DIM}kill whatever is on :3000${RESET}\n"
-printf "  ${BOLD}  scope --json${RESET}  ${DIM}machine-readable output${RESET}\n"
-printf "\n"
-printf "  Aliases:\n"
-printf "  ${CYAN}  st${RESET}  → scope tui\n"
-printf "  ${CYAN}  sk${RESET}  → scope kill\n"
-printf "  ${CYAN}  sp${RESET}  → scope\n"
-printf "\n"
+# ── 6. Zsh tab-completion ─────────────────────────────────────────────────────
+if [[ "$SHELL_NAME" == "zsh" ]]; then
+  step "Installing tab-completion..."
+  COMP_DIR="${ZDOTDIR:-$HOME}/.zsh/completions"
+  mkdir -p "$COMP_DIR"
+  cat > "$COMP_DIR/_scope" << 'COMP'
+#compdef scope
+_scope_commands=(
+  'tui:open the interactive dashboard'
+  'kill:kill a process by port number'
+  '--json:print everything as JSON'
+  '--version:show version number'
+)
+_describe 'scope command' _scope_commands
+COMP
+  if ! grep -q "$COMP_DIR" "$RC" 2>/dev/null; then
+    printf '\nfpath=(%s $fpath)\nautoload -Uz compinit && compinit\n' "$COMP_DIR" >> "$RC"
+  fi
+  ok "Tab-completion installed"
+fi
+
+# ── 7. Done ───────────────────────────────────────────────────────────────────
+p ""
+p "  ${GREEN}${BOLD}All done!${RESET} scope is installed."
+p ""
+p "  ${BOLD}Step 1:${RESET} Reload your terminal shortcuts:"
+p "  ${CYAN}    source $RC${RESET}"
+p ""
+p "  ${BOLD}Step 2:${RESET} Try it:"
+p "  ${CYAN}    st${RESET}        ${DIM}← opens the interactive dashboard${RESET}"
+p "  ${CYAN}    scope${RESET}     ${DIM}← quick table of everything running${RESET}"
+p ""
+p "  ${DIM}Other commands:${RESET}"
+p "  ${CYAN}    sk 3000${RESET}   ${DIM}← stop whatever is on port 3000${RESET}"
+p "  ${CYAN}    scope --json | jq${RESET}  ${DIM}← get data in JSON${RESET}"
+p ""
+p "  ${DIM}Uninstall anytime: npm uninstall -g @ykritet/scope${RESET}"
+p ""

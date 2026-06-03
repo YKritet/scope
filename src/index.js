@@ -8,6 +8,11 @@ import Table from "cli-table3";
 const args = process.argv.slice(2);
 const command = args[0];
 
+if (command === "--help" || command === "-h") {
+  printHelp();
+  process.exit(0);
+}
+
 if (command === "--version" || command === "-v") {
   const { createRequire } = await import("module");
   const req = createRequire(import.meta.url);
@@ -166,14 +171,29 @@ function printDetail(s) {
 }
 
 function printHelp() {
-  console.log(chalk.cyan.bold("\n  scope\n"));
-  console.log(chalk.gray("  scope               ") + "list all services (static table)");
-  console.log(chalk.gray("  scope tui           ") + "interactive TUI — navigate, logs, kill, search");
-  console.log(chalk.gray("  scope <port>        ") + "inspect a specific port in detail");
-  console.log(chalk.gray("  scope kill <port>   ") + "kill whatever is on that port");
-  console.log(chalk.gray("  scope kill <port> -f") + "force kill (SIGKILL)");
-  console.log(chalk.gray("  scope --json        ") + "machine-readable JSON output");
-  console.log(chalk.gray("  scope --version     ") + "show version");
+  const g = chalk.gray;
+  const c = chalk.cyan;
+  const b = chalk.bold;
+  console.log();
+  console.log(b("  scope") + g(" — see every server running on your machine"));
+  console.log();
+  console.log(b("  Commands"));
+  console.log(g("  ──────────────────────────────────────────────────────────"));
+  console.log("  " + c("scope") + "                 " + g("table of everything running right now"));
+  console.log("  " + c("scope tui") + "             " + g("interactive dashboard (arrow keys to navigate)"));
+  console.log("  " + c("scope 3000") + "            " + g("full details for port 3000"));
+  console.log("  " + c("scope kill 3000") + "       " + g("stop whatever is on port 3000"));
+  console.log("  " + c("scope kill 3000 -f") + "    " + g("force-stop it (when regular stop doesn't work)"));
+  console.log("  " + c("scope --json") + "          " + g("get all data in JSON format (for scripts)"));
+  console.log("  " + c("scope --version") + "       " + g("show installed version"));
+  console.log();
+  console.log(b("  Shortcuts") + g(" (added by the installer)"));
+  console.log(g("  ──────────────────────────────────────────────────────────"));
+  console.log("  " + c("st") + "                    " + g("same as: scope tui"));
+  console.log("  " + c("sk 3000") + "               " + g("same as: scope kill 3000"));
+  console.log("  " + c("sp") + "                    " + g("same as: scope"));
+  console.log();
+  console.log(g("  Docs: https://github.com/YKritet/scope"));
   console.log();
 }
 
